@@ -1,0 +1,9 @@
+---
+# Central place to choose the Django settings module.
+# Possible values: settings.vm (developer VM, default), settings.production
+# This is NOT written into any git-tracked file of the svpb repository, but
+# exported via /etc/svpb/env (systemd, login shell) and the crontab of user svpb.
+django_settings_module: settings.vm
+
+# nginx configuration shipped in the svpb repository (wsgi/), derived from the settings module
+nginx_conf_file: "{{ 'svpb_nginx.conf' if django_settings_module == 'settings.production' else 'svpb_nginx.local.conf' }}"

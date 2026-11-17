@@ -10,6 +10,13 @@ then
 fi
 export PATH
 
+# Export environment of the svpb app (DJANGO_SETTINGS_MODULE, ...), also used by svpb.service
+if [ -f /etc/svpb/env ]; then
+    set -a
+    . /etc/svpb/env
+    set +a
+fi
+
 # Source svpb-venv, if it exists
 [ -f /home/svpb/svpb-venv/bin/activate ] && . /home/svpb/svpb-venv/bin/activate
 

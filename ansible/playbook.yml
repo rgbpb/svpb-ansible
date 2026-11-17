@@ -109,6 +109,24 @@
         src: .bash_profile
         owner: svpb
         group: svpb
+    - name: Create directory for SVPB environment file
+      ansible.builtin.file:
+        path: /etc/svpb
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+    - name: Place environment file (single source of truth for DJANGO_SETTINGS_MODULE)
+      # Used as EnvironmentFile by svpb.service and sourced by ~svpb/.bashrc.
+      # Contains no secrets, thus world-readable. Put secrets into the
+      # (untracked) settings/production.py instead.
+      ansible.builtin.copy:
+        dest: /etc/svpb/env
+        content: |
+          DJANGO_SETTINGS_MODULE={{ django_settings_module }}
+        owner: root
+        group: root
+        mode: "0644"
     - name: Fix home permissions (due to synced folder config created as root)
       ansible.builtin.file:
         path: ~svpb
@@ -177,16 +195,6 @@
         dest: /home/svpb/svpb
         update: false
         version: develop
-    - name: Patch manage.py to use the VM settings file
-      ansible.builtin.replace:
-        dest: /home/svpb/svpb/manage.py
-        regexp: 'settings.local'
-        replace: 'settings.vm'
-    - name: Patch wsgi.py to use the VM settings file
-      ansible.builtin.replace:
-        dest: /home/svpb/svpb/svpb/wsgi.py
-        regexp: 'settings.production'
-        replace: 'settings.vm'
     - name: Create logs directory
       ansible.builtin.file:
         path: /home/svpb/svpb/logs
@@ -201,6 +209,13 @@
         command: migrate
         app_path: /home/svpb/svpb
         virtualenv: /home/svpb/svpb-venv
+        settings: "{{ django_settings_module }}"
+    - name: Set DJANGO_SETTINGS_MODULE for all cron jobs of svpb
+      ansible.builtin.cron:
+        name: DJANGO_SETTINGS_MODULE
+        env: true
+        user: svpb
+        job: "{{ django_settings_module }}"
     - name: Cronjob for queued mails
       ansible.builtin.cron:
         name: "Send queued mails"
@@ -266,7 +281,6 @@
   hosts: svpb
   vars:
     svpbhome: /home/svpb/svpb
-    svpbfqdn: mein.svpb.de
   tasks:
     # static files in place:
     - name: Grant nginx access to svpb's home for serving static files
@@ -287,28 +301,14 @@
         command: collectstatic
         app_path: "{{ svpbhome }}"
         virtualenv: /home/svpb/svpb-venv
-    # nginx config patches for local dev VM
-    - name: Patch the svpb_nginx conf file - Disable SSL
-      ansible.builtin.replace:
-        path: /home/svpb/svpb/wsgi/svpb_nginx.conf
-        after: "# substitute your machine's IP address or FQDN"
-        before: '    charset'
-        regexp: '.*'
-        replace: ''
-    - name: Patch the svpb_nginx conf file - Allow access from localhost
-      ansible.builtin.replace:
-        path: /home/svpb/svpb/wsgi/svpb_nginx.conf
-        after: "server_name "
-        before: ';'
-        regexp: '.+'
-        replace: '127.0.0.1'
-    # symblink the just created config file
+        settings: "{{ django_settings_module }}"
+    # symlink the nginx config matching the chosen settings (see group_vars/all.yml)
     - name: Symlink the svpb configuration file from nginx
       become: true
       become_user: root
       ansible.builtin.file:
         dest: /etc/nginx/conf.d/svpb_conf.conf
-        src: /home/svpb/svpb/wsgi/svpb_nginx.conf
+        src: "/home/svpb/svpb/wsgi/{{ nginx_conf_file }}"
         state: link
     - name: Restart and enable nginx
       become: true

@@ -62,6 +62,26 @@ sudo apt install vagrant-libvirt libvirt-daemon-system qemu-system-x86
 sudo usermod -a -G libvirt <YOUR USERNAME>
 ```
 
+Choosing the Django settings module
+-----------------------------------
+The playbook never modifies files tracked by git in the `svpb` repository.
+Which settings module is used (`settings.vm`, `settings.production`, ...) is
+controlled via the environment variable `DJANGO_SETTINGS_MODULE`, set from the
+single variable `django_settings_module` in `ansible/group_vars/all.yml`
+(default: `settings.vm`). The playbook distributes it to
+* `/etc/svpb/env`, which is used as `EnvironmentFile` by `svpb.service`
+  (uwsgi) and sourced by `~svpb/.bashrc` (interactive/SSH shells),
+* the crontab of user `svpb`,
+* the `django_manage` tasks (`migrate`, `collectstatic`).
+
+The nginx configuration is chosen accordingly (`wsgi/svpb_nginx.local.conf` for the VM,
+`wsgi/svpb_nginx.conf` for `settings.production`, see `nginx_conf_file`).
+
+For production, override it without editing any file:
+`ansible-playbook playbook.yml -e django_settings_module=settings.production`.
+Since the default in `manage.py` is `settings.local`, an explicit
+`--settings=...` or the variable in the environment always wins.
+
 AlmaLinux peculiarities
 -----------------------
 AlmaLinux has some peculiarities compared to e.g. Debian.
